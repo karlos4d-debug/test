@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>¿Cómo sonaba el T-Rex? v2.0</title>
+  <title>¿Cómo sonaba el T-Rex? v3.0</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
   <style>
     :root {
@@ -110,7 +110,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       transition: all 0.2s ease;
       box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
     }
@@ -151,6 +151,7 @@
       font-size: 0.85rem;
       color: var(--text-muted);
       text-align: center;
+      min-height: 1.2rem;
     }
   </style>
 </head>
@@ -158,8 +159,8 @@
 
 <div class="app-container">
   <header>
-    <h1>¿Cómo sonaba el T-Rex? <small style="font-size:0.75rem; color:#22c55e;">v2.0</small></h1>
-    <p>Haz una pregunta, graba el sonido y mira el rugido</p>
+    <h1>¿Cómo sonaba el T-Rex? <small style="font-size:0.75rem; color:#22c55e;">v3.0</small></h1>
+    <p>Pregunta, graba la respuesta y mira el resultado</p>
   </header>
 
   <div class="video-card">
@@ -180,17 +181,16 @@
     </div>
 
     <div class="record-btn-container">
-      <button class="record-btn" id="recordBtn">
-        <span id="recordIcon">●</span>
+      <button class="record-btn" id="recordBtn" type="button">
         <span id="recordText">Grabar</span>
       </button>
       <div class="audio-indicator" id="audioIndicator">Pulsa para grabar tu sonido cómico</div>
     </div>
 
-    <button class="btn" id="previewBtn" disabled>
+    <button class="btn" id="previewBtn" type="button" disabled>
       ▶ Reproducir Broma
     </button>
-    <button class="btn btn-success" id="exportBtn" disabled>
+    <button class="btn btn-success" id="exportBtn" type="button" disabled>
       ⬇ Exportar Vídeo Final
     </button>
   </div>
@@ -211,10 +211,11 @@
   let recordedAudioBlob = null;
   let recordedAudio = null;
   let audioDuration = 0;
+  let recordStartTime = 0;
   let isRecording = false;
 
-  // 1. Grabación de voz (Bloque exacto que funcionó sin fallos)
-  recordBtn.addEventListener('click', async () => {
+  // 1. Grabación con desbloqueo directo y cronómetro propio
+  recordBtn.onclick = async () => {
     if (!isRecording) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -222,64 +223,66 @@
         audioChunks = [];
 
         mediaRecorder.ondataavailable = e => {
-          if (e.data.size > 0) audioChunks.push(e.data);
+          if (e.data && e.data.size > 0) audioChunks.push(e.data);
         };
 
         mediaRecorder.onstop = () => {
-          recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          // Calculamos la duración real sin depender de la cabecera WebM
+          audioDuration = Math.max(0.5, (Date.now() - recordStartTime) / 1000);
+          recordedAudioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
           const audioUrl = URL.createObjectURL(recordedAudioBlob);
           recordedAudio = new Audio(audioUrl);
 
-          recordedAudio.onloadedmetadata = () => {
-            audioDuration = recordedAudio.duration;
-            audioIndicator.textContent = `Grabado: ${audioDuration.toFixed(1)} segundos`;
-            previewBtn.disabled = false;
-            exportBtn.disabled = false;
-          };
+          // Desbloqueamos los botones inmediatamente
+          audioIndicator.textContent = `Grabado: ${audioDuration.toFixed(1)} segundos`;
+          previewBtn.disabled = false;
+          exportBtn.disabled = false;
 
-          stream.getTracks().forEach(track => track.stop());
+          stream.getTracks().forEach(t => t.stop());
         };
 
         mediaRecorder.start();
+        recordStartTime = Date.now();
         isRecording = true;
         recordBtn.classList.add('recording');
         recordText.textContent = 'Parar';
         audioIndicator.textContent = 'Grabando... ¡haz el sonido ahora!';
       } catch (err) {
-        alert('No se pudo acceder al micrófono: ' + err.message);
+        alert('Error al acceder al micrófono: ' + err.message);
       }
     } else {
-      mediaRecorder.stop();
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
       isRecording = false;
       recordBtn.classList.remove('recording');
       recordText.textContent = 'Grabar';
     }
-  });
+  };
 
-  // 2. Previsualización interactiva
-  previewBtn.addEventListener('click', () => {
+  // 2. Previsualización en pantalla
+  previewBtn.onclick = () => {
     if (!recordedAudio) return;
 
     video.currentTime = 0;
     video.volume = 1;
     video.play();
 
-    let audioTriggered = false;
+    let swapped = false;
+    const mode = shortSoundMode.value;
 
-    const checkTime = () => {
-      if (video.currentTime >= ROAR_START_TIME && !audioTriggered) {
-        audioTriggered = true;
+    const onFrame = () => {
+      if (video.currentTime >= ROAR_START_TIME && !swapped) {
+        swapped = true;
         video.volume = 0;
-
-        const mode = shortSoundMode.value;
         recordedAudio.currentTime = 0;
 
         if (mode === 'loop') {
           recordedAudio.loop = true;
           recordedAudio.playbackRate = 1.0;
-        } else if (mode === 'stretch' && audioDuration < 5) {
+        } else if (mode === 'stretch' && audioDuration < 5.0) {
           recordedAudio.loop = false;
-          recordedAudio.playbackRate = Math.max(0.4, audioDuration / 5);
+          recordedAudio.playbackRate = Math.max(0.4, audioDuration / 5.0);
         } else {
           recordedAudio.loop = false;
           recordedAudio.playbackRate = 1.0;
@@ -291,122 +294,37 @@
           recordedAudio.onended = () => {
             setTimeout(() => {
               video.pause();
-            }, 400);
+            }, 350);
           };
         }
       }
 
       if (!video.paused && !video.ended) {
-        requestAnimationFrame(checkTime);
+        requestAnimationFrame(onFrame);
+      } else {
+        video.volume = 1;
+        if (recordedAudio) recordedAudio.pause();
       }
     };
 
-    requestAnimationFrame(checkTime);
-  });
+    requestAnimationFrame(onFrame);
+  };
 
-  // 3. Exportar vídeo final completo (con sonido de los primeros 7s + audio grabado)
-  exportBtn.addEventListener('click', async () => {
+  // 3. Exportación completa (Vídeo 0s-12s + Audio original 0s-7s + Audio grabado desde 7s)
+  exportBtn.onclick = async () => {
     if (!recordedAudioBlob) return;
     exportBtn.disabled = true;
-    exportBtn.textContent = 'Procesando vídeo completo...';
+    exportBtn.textContent = 'Generando vídeo completo...';
 
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
 
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const dest = audioCtx.createMediaStreamDestination();
 
-      // Decodificar tanto el audio del vídeo original como el audio grabado
-      const [videoRes, userArrayBuffer] = await Promise.all([
-        fetch('T-rex%20Roar.mp4').then(r => r.arrayBuffer()),
-        recordedAudioBlob.arrayBuffer()
-      ]);
-
-      const [originalVideoAudioBuffer, userAudioBuffer] = await Promise.all([
-        audioCtx.decodeAudioData(videoRes),
-        audioCtx.decodeAudioData(userArrayBuffer)
-      ]);
-
-      const canvasStream = canvas.captureStream(30);
-      const combinedStream = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...dest.stream.getAudioTracks()
-      ]);
-
-      const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
-      const outputChunks = [];
-
-      recorder.ondataavailable = e => {
-        if (e.data.size > 0) outputChunks.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const finalBlob = new Blob(outputChunks, { type: 'video/webm' });
-        const downloadUrl = URL.createObjectURL(finalBlob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = 'broma_t_rex_completa.webm';
-        a.click();
-
-        exportBtn.disabled = false;
-        exportBtn.textContent = '⬇ Exportar Vídeo Final';
-        video.volume = 1;
-        audioCtx.close();
-      };
-
-      // Preparar audio de los primeros 7 segundos del vídeo original
-      const origSource = audioCtx.createBufferSource();
-      origSource.buffer = originalVideoAudioBuffer;
-      const origGain = audioCtx.createGain();
-      origSource.connect(origGain);
-      origGain.connect(dest);
-
-      recorder.start();
-      video.currentTime = 0;
-      video.volume = 0; // Silenciamos el altavoz durante el renderizado porque va por dest
-      await video.play();
-
-      // Reproduce el audio original solo desde el segundo 0 hasta el segundo 7.0
-      origSource.start(0, 0, ROAR_START_TIME);
-
-      let userAudioStarted = false;
-      const mode = shortSoundMode.value;
-
-      const drawFrame = () => {
-        if (!video.paused && !video.ended) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          if (video.currentTime >= ROAR_START_TIME && !userAudioStarted) {
-            userAudioStarted = true;
-            const userSource = audioCtx.createBufferSource();
-            userSource.buffer = userAudioBuffer;
-
-            if (mode === 'loop') {
-              userSource.loop = true;
-            } else if (mode === 'stretch' && userAudioBuffer.duration < 5) {
-              userSource.playbackRate.value = Math.max(0.4, userAudioBuffer.duration / 5);
-            }
-
-            userSource.connect(dest);
-            userSource.start();
-
-            if (mode === 'cut') {
-              setTimeout(() => {
-                video.pause();
-                if (recorder.state !== 'inactive') recorder.stop();
-              }, (userAudioBuffer.duration + 0.4) * 1000);
-            }
-          }
-
-          requestAnimationFrame(drawFrame);
-        } else if (mode !== 'cut' || !userAudioStarted) {
-          if (recorder.state !== 'inactive') recorder.stop();
-        }
-      };
-
-      drawFrame();
-    } catch (err) {
-      alert
+      // Decodificar el audio del vídeo original y el audio grabado
+      const [videoBufferData, userBufferData] = await Promise.all([
+        fetch('T-rex%20Roar.mp4').then(r => r
