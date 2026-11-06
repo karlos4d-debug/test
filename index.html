@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>T-Rex Prank Meme</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151d2f;
+      --accent: #eab308;
+      --accent-hover: #ca8a04;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 12px;
+      min-height: 100vh;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    header {
+      text-align: center;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    header p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .video-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    video {
+      width: 100%;
+      max-height: 260px;
+      background: #000;
+      object-fit: contain;
+    }
+    .status-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .record-btn-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+    }
+    .record-btn {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: var(--danger);
+      border: 4px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+    }
+    .record-btn.recording {
+      animation: pulse 1s infinite alternate;
+      border-color: white;
+      transform: scale(1.05);
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      100% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+    }
+    .btn {
+      background: var(--accent);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+    .audio-indicator {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .mode-select {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .mode-select select {
+      background: #0b0f19;
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <header>
+    <h1>¿Cómo sonaba el T-Rex?</h1>
+    <p>Haz una pregunta, graba el sonido y mira el rugido</p>
+  </header>
+
+  <div class="video-card">
+    <div class="status-badge" id="videoStatus">
+      <span>●</span> Vídeo cargado (Inicio a los 7.0s)
+    </div>
+    <video id="tRexVideo" playsinline preload="auto" crossorigin="anonymous">
+      <source src="https://filedn.eu/lNtuIESe0rJJEpSE5TuxUYh/T-rex%20Roar.mp4" type="video/mp4">
+      Tu navegador no soporta vídeo HTML5.
+    </video>
+  </div>
+
+  <div class="controls-card">
+    <div class="mode-select">
+      <label for="shortSoundMode">Si el sonido dura menos de 5 seg:</label>
+      <select id="shortSoundMode">
+        <option value="cut">Corte cómico (termina al acabar el sonido)</option>
+        <option value="loop">Bucle cómico (repite el sonido hasta el final)</option>
+        <option value="stretch">Estirar audio (ralentizar sonido)</option>
+      </select>
+    </div>
+
+    <div class="record-btn-container">
+      <button class="record-btn" id="recordBtn">
+        <span id="recordIcon">●</span>
+        <span id="recordText">Grabar</span>
+      </button>
+      <div class="audio-indicator" id="audioIndicator">Pulsa para grabar tu sonido cómico</div>
+    </div>
+
+    <button class="btn" id="previewBtn" disabled>
+      ▶ Reproducir Broma
+    </button>
+    <button class="btn btn-success" id="exportBtn" disabled>
+      ⬇ Exportar Vídeo Final
+    </button>
+  </div>
+</div>
+
+<script>
+  const video = document.getElementById('tRexVideo');
+  const recordBtn = document.getElementById('recordBtn');
+  const recordText = document.getElementById('recordText');
+  const audioIndicator = document.getElementById('audioIndicator');
+  const previewBtn = document.getElementById('previewBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const shortSoundMode = document.getElementById('shortSoundMode');
+
+  const ROAR_START_TIME = 7.0; // Segundo exacto donde el Rex abre la mandíbula
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordedAudioBlob = null;
+  let recordedAudio = null;
+  let audioDuration = 0;
+  let isRecording = false;
+
+  // Forzar recarga limpia del vídeo
+  video.load();
+
+  // Grabación de voz
+  recordBtn.addEventListener('click', async () => {
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const audioUrl = URL.createObjectURL(recordedAudioBlob);
+          recordedAudio = new Audio(audioUrl);
+          
+          recordedAudio.onloadedmetadata = () => {
+            audioDuration = recordedAudio.duration;
+            audioIndicator.textContent = `Grabado: ${audioDuration.toFixed(1)} segundos`;
+            previewBtn.disabled = false;
+            exportBtn.disabled = false;
+          };
+          
+          // Detener pistas de micrófono
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.classList.add('recording');
+        recordText.textContent = 'Parar';
+        audioIndicator.textContent = 'Grabando... ¡haz el sonido ahora!';
+      } catch (err) {
+        alert('No se pudo acceder al micrófono: ' + err.message);
+      }
+    } else {
+      mediaRecorder.stop();
+      isRecording = false;
+      recordBtn.classList.remove('recording');
+      recordText.textContent = 'Grabar';
+    }
+  });
+
+  // Previsualización interactiva con sustitución de audio
+  previewBtn.addEventListener('click', () => {
+    if (!recordedAudio) return;
+
+    video.currentTime = 0;
+    video.volume = 1;
+    video.play();
+
+    let audioTriggered = false;
+
+    const checkTime = () => {
+      if (video.currentTime >= ROAR_START_TIME && !audioTriggered) {
+        audioTriggered = true;
+        video.volume = 0; // Silencia el rugido original
+        
+        const mode = shortSoundMode.value;
+        recordedAudio.currentTime = 0;
+        
+        if (mode === 'loop') {
+          recordedAudio.loop = true;
+        } else if (mode === 'stretch' && audioDuration < 5) {
+          recordedAudio.loop = false;
+          recordedAudio.playbackRate = Math.max(0.4, audioDuration / 5);
+        } else {
+          recordedAudio.loop = false;
+        }
+
+        recordedAudio.play();
+
+        // En modo "corte cómico", parar el vídeo medio segundo después de que acabe el audio
+        if (mode === 'cut') {
+          recordedAudio.onended = () => {
+            setTimeout(() => {
+              video.pause();
+            }, 400);
+          };
+        }
+      }
+
+      if (!video.paused && !video.ended) {
+        requestAnimationFrame(checkTime);
+      }
+    };
+
+    requestAnimationFrame(checkTime);
+  });
+
+  // Exportar vídeo final combinando audio y fotogramas
+  exportBtn.addEventListener('click', async () => {
+    if (!recordedAudioBlob) return;
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Procesando vídeo...';
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 360;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioCtx.createMediaStreamDestination();
+
+    // Cargar buffer del audio grabado
+    const arrayBuffer = await recordedAudioBlob.arrayBuffer();
+    const userAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    // Stream de canvas + audio de salida
+    const canvasStream = canvas.captureStream(30);
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
+    const outputChunks = [];
+
+    recorder.ondataavailable = e => outputChunks.push(e.data);
+    recorder.onstop = () => {
+      const finalBlob = new Blob(outputChunks, { type: 'video/webm' });
+      const downloadUrl = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = 'broma_t_rex.webm';
+      a.click();
+
+      exportBtn.disabled = false;
+      exportBtn.textContent = '⬇ Exportar Vídeo Final';
+      video.volume = 1;
+    };
+
+    recorder.start();
+    video.currentTime = 0;
+    video.volume = 0;
+    video.play();
+
+    let userAudioStarted = false;
+    const mode = shortSoundMode.value;
+
+    const drawFrame = () => {
+      if (!video.paused && !video.ended) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Disparar audio grabado al llegar al segundo 7
+        if (video.currentTime >= ROAR_START_TIME && !userAudioStarted) {
+          userAudioStarted = true;
+          const userSource = audioCtx.createBufferSource();
+          userSource.buffer = userAudioBuffer;
+
+          if (mode === 'loop') {
+            userSource.loop = true;
+          } else if (mode === 'stretch' && userAudioBuffer.duration < 5) {
+            userSource.playbackRate.value = Math.max(0.4, userAudioBuffer.duration / 5);
+          }
+
+          userSource.connect(dest);
+          userSource.start();
+
+          if (mode === 'cut') {
+            setTimeout(() => {
+              video.pause();
+              recorder.stop();
+            }, (userAudioBuffer.duration + 0.4) * 1000);
+          }
+        }
+
+        requestAnimationFrame(drawFrame);
+      } else if (mode !== 'cut' || !userAudioStarted) {
+        recorder.stop();
+      }
+    };
+
+    drawFrame();
+  });
+</script>
+
+</body>
+</html>
