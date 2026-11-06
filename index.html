@@ -75,12 +75,28 @@
       flex-direction: column;
       gap: 12px;
     }
+    .mode-select {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .mode-select select {
+      background: #0b0f19;
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      outline: none;
+    }
     .record-btn-container {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 8px;
-      margin: 6px 0;
+      margin: 4px 0;
     }
     .record-btn {
       width: 76px;
@@ -156,6 +172,15 @@
   </div>
 
   <div class="controls-card">
+    <div class="mode-select">
+      <label for="shortSoundMode">Si el sonido dura menos de 5 seg:</label>
+      <select id="shortSoundMode">
+        <option value="cut">Corte cómico (cortar el vídeo al terminar el sonido)</option>
+        <option value="loop">Bucle cómico (repetir sonido hasta el final del clip)</option>
+        <option value="stretch">Estirar audio (ralentizar el sonido)</option>
+      </select>
+    </div>
+
     <div class="record-btn-container">
       <button class="record-btn" id="recordBtn" type="button">
         <span id="recordText">Grabar</span>
@@ -177,17 +202,19 @@
   const recordBtn = document.getElementById('recordBtn');
   const recordText = document.getElementById('recordText');
   const audioIndicator = document.getElementById('audioIndicator');
+  const shortSoundMode = document.getElementById('shortSoundMode');
   const previewBtn = document.getElementById('previewBtn');
   const exportBtn = document.getElementById('exportBtn');
 
-  const ROAR_START_TIME = 7.0;
+  const ROAR_START_TIME = 7.0; // Segundo exacto donde el Rex abre la mandíbula
   let mediaRecorder = null;
   let audioChunks = [];
   let recordedAudioBlob = null;
   let recordedAudio = null;
+  let audioDuration = 0;
   let isRecording = false;
 
-  // 1. Grabación limpia del micrófono (código probado y funcional)
+  // 1. Grabación limpia del micrófono
   recordBtn.onclick = async () => {
     if (!isRecording) {
       try {
@@ -205,13 +232,12 @@
           recordedAudio = new Audio(audioUrl);
 
           recordedAudio.onloadedmetadata = () => {
-            const sec = recordedAudio.duration.toFixed(1);
-            audioIndicator.textContent = `Grabado: ${sec} segundos`;
+            audioDuration = recordedAudio.duration;
+            audioIndicator.textContent = `Grabado: ${audioDuration.toFixed(1)} segundos`;
             previewBtn.disabled = false;
             exportBtn.disabled = false;
           };
 
-          // Fallback por si los metadatos tardan en computarse
           setTimeout(() => {
             if (previewBtn.disabled && recordedAudioBlob.size > 0) {
               audioIndicator.textContent = 'Audio preparado';
@@ -241,7 +267,7 @@
     }
   };
 
-  // 2. Previsualización en pantalla
+  // 2. Previsualización de la broma según el modo seleccionado
   previewBtn.onclick = () => {
     if (!recordedAudio) return;
 
@@ -250,99 +276,34 @@
     video.play();
 
     let swapped = false;
+    const mode = shortSoundMode.value;
 
     const onFrame = () => {
       if (video.currentTime >= ROAR_START_TIME && !swapped) {
         swapped = true;
-        video.volume = 0;
+        video.volume = 0; // Silencia el rugido original
         recordedAudio.currentTime = 0;
-        recordedAudio.play();
-      }
 
-      if (!video.paused && !video.ended) {
-        requestAnimationFrame(onFrame);
-      } else {
-        video.volume = 1;
-      }
-    };
-
-    requestAnimationFrame(onFrame);
-  };
-
-  // 3. Exportación del vídeo con corte de audio sincronizado al segundo 7
-  exportBtn.onclick = async () => {
-    if (!recordedAudioBlob) return;
-    exportBtn.disabled = true;
-    exportBtn.textContent = 'Generando vídeo...';
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const dest = audioCtx.createMediaStreamDestination();
-
-    const arrayBuffer = await recordedAudioBlob.arrayBuffer();
-    const userAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-    const canvasStream = canvas.captureStream(30);
-    const outputStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...dest.stream.getAudioTracks()
-    ]);
-
-    const mime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/mp4'))
-      ? 'video/mp4'
-      : 'video/webm';
-
-    const recorder = new MediaRecorder(outputStream, { mimeType: mime });
-    const chunks = [];
-
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = () => {
-      const finalBlob = new Blob(chunks, { type: mime });
-      const dlUrl = URL.createObjectURL(finalBlob);
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = `t_rex_broma.${mime === 'video/mp4' ? 'mp4' : 'webm'}`;
-      a.click();
-
-      exportBtn.disabled = false;
-      exportBtn.textContent = '⬇ Exportar Vídeo Final';
-      video.volume = 1;
-    };
-
-    recorder.start();
-    video.currentTime = 0;
-    video.volume = 1;
-    video.play();
-
-    let roarTriggered = false;
-
-    const render = () => {
-      if (!video.paused && !video.ended) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        if (video.currentTime >= ROAR_START_TIME && !roarTriggered) {
-          roarTriggered = true;
-          video.volume = 0;
-
-          const userSource = audioCtx.createBufferSource();
-          userSource.buffer = userAudioBuffer;
-          userSource.connect(dest);
-          userSource.start();
+        if (mode === 'loop') {
+          recordedAudio.loop = true;
+          recordedAudio.playbackRate = 1.0;
+        } else if (mode === 'stretch' && audioDuration < 5.0 && audioDuration > 0) {
+          recordedAudio.loop = false;
+          recordedAudio.playbackRate = Math.max(0.4, audioDuration / 5.0);
+        } else {
+          recordedAudio.loop = false;
+          recordedAudio.playbackRate = 1.0;
         }
 
-        requestAnimationFrame(render);
-      } else {
-        recorder.stop();
+        recordedAudio.play();
+
+        if (mode === 'cut') {
+          recordedAudio.onended = () => {
+            setTimeout(() => {
+              video.pause();
+            }, 300);
+          };
+        }
       }
-    };
 
-    requestAnimationFrame(render);
-  };
-</script>
-
-</body>
-</html>
+      if (!video.paused && !video.ended) {
