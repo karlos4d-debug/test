@@ -98,8 +98,6 @@
       font-size: 0.85rem;
       transition: all 0.2s ease;
       box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
-      user-select: none;
-      -webkit-tap-highlight-color: transparent;
     }
     .record-btn.recording {
       animation: pulse 1s infinite alternate;
@@ -140,17 +138,6 @@
       text-align: center;
       min-height: 1.2rem;
     }
-    .error-box {
-      display: none;
-      background: rgba(239, 68, 68, 0.2);
-      border: 1px solid var(--danger);
-      color: #fca5a5;
-      padding: 8px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      text-align: center;
-      word-break: break-word;
-    }
   </style>
 </head>
 <body>
@@ -174,7 +161,6 @@
         <span id="recordText">Grabar</span>
       </button>
       <div class="audio-indicator" id="audioIndicator">Pulsa para grabar el sonido cómico</div>
-      <div class="error-box" id="errorBox"></div>
     </div>
 
     <button class="btn" id="previewBtn" type="button" disabled>
@@ -191,7 +177,6 @@
   const recordBtn = document.getElementById('recordBtn');
   const recordText = document.getElementById('recordText');
   const audioIndicator = document.getElementById('audioIndicator');
-  const errorBox = document.getElementById('errorBox');
   const previewBtn = document.getElementById('previewBtn');
   const exportBtn = document.getElementById('exportBtn');
 
@@ -202,58 +187,20 @@
   let recordedAudio = null;
   let isRecording = false;
 
-  function showError(msg) {
-    errorBox.textContent = msg;
-    errorBox.style.display = 'block';
-  }
-
-  function clearError() {
-    errorBox.textContent = '';
-    errorBox.style.display = 'none';
-  }
-
-  // Detectar formato compatible con el navegador (iOS Safari no soporta webm para grabar audio)
-  function getSupportedAudioMime() {
-    const types = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/mp4',
-      'audio/aac',
-      'audio/ogg'
-    ];
-    for (const t of types) {
-      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
-        return t;
-      }
-    }
-    return '';
-  }
-
-  // Grabar audio con control de compatibilidad
-  async function toggleRecording() {
-    clearError();
-
+  // 1. Grabación limpia del micrófono (código probado y funcional)
+  recordBtn.onclick = async () => {
     if (!isRecording) {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showError('Tu navegador no permite acceso al micrófono en este entorno.');
-        return;
-      }
-
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = getSupportedAudioMime();
-        const options = mimeType ? { mimeType } : {};
-
-        mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
 
         mediaRecorder.ondataavailable = e => {
-          if (e.data && e.data.size > 0) audioChunks.push(e.data);
+          if (e.data.size > 0) audioChunks.push(e.data);
         };
 
         mediaRecorder.onstop = () => {
-          const type = mimeType || 'audio/webm';
-          recordedAudioBlob = new Blob(audioChunks, { type });
+          recordedAudioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
           const audioUrl = URL.createObjectURL(recordedAudioBlob);
           recordedAudio = new Audio(audioUrl);
 
@@ -264,16 +211,16 @@
             exportBtn.disabled = false;
           };
 
-          // Fallback si onloadedmetadata tarda en disparar
+          // Fallback por si los metadatos tardan en computarse
           setTimeout(() => {
             if (previewBtn.disabled && recordedAudioBlob.size > 0) {
-              audioIndicator.textContent = 'Audio guardado';
+              audioIndicator.textContent = 'Audio preparado';
               previewBtn.disabled = false;
               exportBtn.disabled = false;
             }
           }, 300);
 
-          stream.getTracks().forEach(track => track.stop());
+          stream.getTracks().forEach(t => t.stop());
         };
 
         mediaRecorder.start();
@@ -282,8 +229,7 @@
         recordText.textContent = 'Parar';
         audioIndicator.textContent = 'Grabando... ¡haz el sonido ahora!';
       } catch (err) {
-        console.error(err);
-        showError('Error de micrófono: ' + (err.name || err.message));
+        alert('Error al acceder al micrófono: ' + err.message);
       }
     } else {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -293,12 +239,10 @@
       recordBtn.classList.remove('recording');
       recordText.textContent = 'Grabar';
     }
-  }
+  };
 
-  recordBtn.addEventListener('click', toggleRecording);
-
-  // Reproducir broma en el navegador
-  previewBtn.addEventListener('click', () => {
+  // 2. Previsualización en pantalla
+  previewBtn.onclick = () => {
     if (!recordedAudio) return;
 
     video.currentTime = 0;
@@ -307,7 +251,7 @@
 
     let swapped = false;
 
-    const checkTime = () => {
+    const onFrame = () => {
       if (video.currentTime >= ROAR_START_TIME && !swapped) {
         swapped = true;
         video.volume = 0;
@@ -316,8 +260,89 @@
       }
 
       if (!video.paused && !video.ended) {
-        requestAnimationFrame(checkTime);
+        requestAnimationFrame(onFrame);
       } else {
         video.volume = 1;
       }
     };
+
+    requestAnimationFrame(onFrame);
+  };
+
+  // 3. Exportación del vídeo con corte de audio sincronizado al segundo 7
+  exportBtn.onclick = async () => {
+    if (!recordedAudioBlob) return;
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Generando vídeo...';
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioCtx.createMediaStreamDestination();
+
+    const arrayBuffer = await recordedAudioBlob.arrayBuffer();
+    const userAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    const canvasStream = canvas.captureStream(30);
+    const outputStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    const mime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/mp4'))
+      ? 'video/mp4'
+      : 'video/webm';
+
+    const recorder = new MediaRecorder(outputStream, { mimeType: mime });
+    const chunks = [];
+
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      const finalBlob = new Blob(chunks, { type: mime });
+      const dlUrl = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = `t_rex_broma.${mime === 'video/mp4' ? 'mp4' : 'webm'}`;
+      a.click();
+
+      exportBtn.disabled = false;
+      exportBtn.textContent = '⬇ Exportar Vídeo Final';
+      video.volume = 1;
+    };
+
+    recorder.start();
+    video.currentTime = 0;
+    video.volume = 1;
+    video.play();
+
+    let roarTriggered = false;
+
+    const render = () => {
+      if (!video.paused && !video.ended) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        if (video.currentTime >= ROAR_START_TIME && !roarTriggered) {
+          roarTriggered = true;
+          video.volume = 0;
+
+          const userSource = audioCtx.createBufferSource();
+          userSource.buffer = userAudioBuffer;
+          userSource.connect(dest);
+          userSource.start();
+        }
+
+        requestAnimationFrame(render);
+      } else {
+        recorder.stop();
+      }
+    };
+
+    requestAnimationFrame(render);
+  };
+</script>
+
+</body>
+</html>
