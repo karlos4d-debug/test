@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>¿Cómo sonaba el T-Rex?</title>
-  <!-- Elimina el error 404 del favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
   <style>
     :root {
@@ -96,9 +95,11 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       transition: all 0.2s ease;
       box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .record-btn.recording {
       animation: pulse 1s infinite alternate;
@@ -137,6 +138,18 @@
       font-size: 0.85rem;
       color: var(--text-muted);
       text-align: center;
+      min-height: 1.2rem;
+    }
+    .error-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      text-align: center;
+      word-break: break-word;
     }
   </style>
 </head>
@@ -157,16 +170,17 @@
 
   <div class="controls-card">
     <div class="record-btn-container">
-      <button class="record-btn" id="recordBtn">
+      <button class="record-btn" id="recordBtn" type="button">
         <span id="recordText">Grabar</span>
       </button>
       <div class="audio-indicator" id="audioIndicator">Pulsa para grabar el sonido cómico</div>
+      <div class="error-box" id="errorBox"></div>
     </div>
 
-    <button class="btn" id="previewBtn" disabled>
+    <button class="btn" id="previewBtn" type="button" disabled>
       ▶ Reproducir Broma
     </button>
-    <button class="btn btn-success" id="exportBtn" disabled>
+    <button class="btn btn-success" id="exportBtn" type="button" disabled>
       ⬇ Exportar Vídeo Final
     </button>
   </div>
@@ -177,41 +191,88 @@
   const recordBtn = document.getElementById('recordBtn');
   const recordText = document.getElementById('recordText');
   const audioIndicator = document.getElementById('audioIndicator');
+  const errorBox = document.getElementById('errorBox');
   const previewBtn = document.getElementById('previewBtn');
   const exportBtn = document.getElementById('exportBtn');
 
-  const ROAR_START_TIME = 7.0; // Segundo exacto donde el Rex abre la boca
+  const ROAR_START_TIME = 7.0;
   let mediaRecorder = null;
   let audioChunks = [];
   let recordedAudioBlob = null;
   let recordedAudio = null;
-  let audioDuration = 0;
   let isRecording = false;
 
-  // 1. Grabación de voz
-  recordBtn.addEventListener('click', async () => {
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+
+  function clearError() {
+    errorBox.textContent = '';
+    errorBox.style.display = 'none';
+  }
+
+  // Detectar formato compatible con el navegador (iOS Safari no soporta webm para grabar audio)
+  function getSupportedAudioMime() {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/aac',
+      'audio/ogg'
+    ];
+    for (const t of types) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+        return t;
+      }
+    }
+    return '';
+  }
+
+  // Grabar audio con control de compatibilidad
+  async function toggleRecording() {
+    clearError();
+
     if (!isRecording) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showError('Tu navegador no permite acceso al micrófono en este entorno.');
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        const mimeType = getSupportedAudioMime();
+        const options = mimeType ? { mimeType } : {};
+
+        mediaRecorder = new MediaRecorder(stream, options);
         audioChunks = [];
 
         mediaRecorder.ondataavailable = e => {
-          if (e.data.size > 0) audioChunks.push(e.data);
+          if (e.data && e.data.size > 0) audioChunks.push(e.data);
         };
 
         mediaRecorder.onstop = () => {
-          recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const type = mimeType || 'audio/webm';
+          recordedAudioBlob = new Blob(audioChunks, { type });
           const audioUrl = URL.createObjectURL(recordedAudioBlob);
           recordedAudio = new Audio(audioUrl);
-          
+
           recordedAudio.onloadedmetadata = () => {
-            audioDuration = recordedAudio.duration;
-            audioIndicator.textContent = `Grabado: ${audioDuration.toFixed(1)} segundos`;
+            const sec = recordedAudio.duration.toFixed(1);
+            audioIndicator.textContent = `Grabado: ${sec} segundos`;
             previewBtn.disabled = false;
             exportBtn.disabled = false;
           };
-          
+
+          // Fallback si onloadedmetadata tarda en disparar
+          setTimeout(() => {
+            if (previewBtn.disabled && recordedAudioBlob.size > 0) {
+              audioIndicator.textContent = 'Audio guardado';
+              previewBtn.disabled = false;
+              exportBtn.disabled = false;
+            }
+          }, 300);
+
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -221,17 +282,22 @@
         recordText.textContent = 'Parar';
         audioIndicator.textContent = 'Grabando... ¡haz el sonido ahora!';
       } catch (err) {
-        alert('No se pudo acceder al micrófono: ' + err.message);
+        console.error(err);
+        showError('Error de micrófono: ' + (err.name || err.message));
       }
     } else {
-      mediaRecorder.stop();
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
       isRecording = false;
       recordBtn.classList.remove('recording');
       recordText.textContent = 'Grabar';
     }
-  });
+  }
 
-  // 2. Previsualización de la broma
+  recordBtn.addEventListener('click', toggleRecording);
+
+  // Reproducir broma en el navegador
   previewBtn.addEventListener('click', () => {
     if (!recordedAudio) return;
 
@@ -244,7 +310,7 @@
     const checkTime = () => {
       if (video.currentTime >= ROAR_START_TIME && !swapped) {
         swapped = true;
-        video.volume = 0; // Silencia el rugido original
+        video.volume = 0;
         recordedAudio.currentTime = 0;
         recordedAudio.play();
       }
@@ -255,54 +321,3 @@
         video.volume = 1;
       }
     };
-
-    requestAnimationFrame(checkTime);
-  });
-
-  // 3. Exportación completa: Video íntegro + mezcla exacta de audio
-  exportBtn.addEventListener('click', async () => {
-    if (!recordedAudioBlob) return;
-    exportBtn.disabled = true;
-    exportBtn.textContent = 'Generando vídeo final...';
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const dest = audioCtx.createMediaStreamDestination();
-
-    // Fuente 1: Pista de audio del vídeo original (0s a 7s)
-    let videoSourceNode;
-    try {
-      videoSourceNode = audioCtx.createMediaElementSource(video);
-    } catch(e) {
-      // Reutiliza el nodo si ya fue creado
-    }
-    const videoGain = audioCtx.createGain();
-    if (videoSourceNode) {
-      videoSourceNode.connect(videoGain);
-      videoGain.connect(dest);
-    }
-
-    // Fuente 2: Audio cómico grabado para el segundo 7
-    const arrayBuffer = await recordedAudioBlob.arrayBuffer();
-    const userAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-    // Salida combinada
-    const canvasStream = canvas.captureStream(30);
-    const outputStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...dest.stream.getAudioTracks()
-    ]);
-
-    const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-    const recorder = new MediaRecorder(outputStream, { mimeType: mime });
-    const chunks = [];
-
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = () => {
-      const finalBlob = new Blob(chunks, { type: mime });
-      const dlUrl = URL.createObjectURL(finalBlob);
-      const a = document.createElement
